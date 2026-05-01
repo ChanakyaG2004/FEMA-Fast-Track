@@ -8,3 +8,4 @@ dist/
 .env.local
 backend/rag_engine/data/
 backend/rag_engine/chroma_db/
+backend/.env
