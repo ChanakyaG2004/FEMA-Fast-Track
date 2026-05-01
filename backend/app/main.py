@@ -87,30 +87,32 @@ async def _parse_payload(request: Request) -> tuple[AnalyzeClaimRequest, list[Up
 def _rag_query(text: str, claim) -> str:
     return " ".join(filter(None, [text, claim.disaster_type, claim.damage_type]))
 
-# --- THE "FORCE FIND" FRONTEND LOGIC ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# We try 3 different paths just to be absolutely sure
-possible_paths = [
-    os.path.join(BASE_DIR, "dist"),         # backend/app/dist
-    os.path.join(os.path.dirname(BASE_DIR), "dist"), # backend/dist
-    "/opt/render/project/src/backend/app/dist" # Hardcoded Render path
+# --- THE UNIVERSAL FOLDER SEARCH ---
+STATIC_PATH = None
+# Check current directory, one up, and common Render paths
+search_locations = [
+    os.path.join(os.path.dirname(__file__), "dist"),
+    os.path.join(os.getcwd(), "backend", "app", "dist"),
+    os.path.join(os.getcwd(), "app", "dist"),
+    "/opt/render/project/src/backend/app/dist"
 ]
 
-STATIC_PATH = None
-for p in possible_paths:
-    if os.path.exists(p) and os.path.exists(os.path.join(p, "index.html")):
-        STATIC_PATH = p
+for loc in search_locations:
+    if os.path.exists(os.path.join(loc, "index.html")):
+        STATIC_PATH = loc
+        print(f"DEBUG: Found frontend at {loc}")
         break
 
 if STATIC_PATH:
     app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_PATH, "assets")), name="assets")
 
     @app.get("/{catchall:path}")
-    async def serve_frontend(request: Request, catchall: str):
+    async def serve_frontend(catchall: str):
         if catchall.startswith("api/"):
             return {"detail": "Not Found"}
-        full_path = os.path.join(STATIC_PATH, catchall)
-        if os.path.isfile(full_path):
-            return FileResponse(full_path)
+        file_path = os.path.join(STATIC_PATH, catchall)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
         return FileResponse(os.path.join(STATIC_PATH, "index.html"))
+else:
+    print("DEBUG: dist/index.html not found in any search location")
