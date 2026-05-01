@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Optional, List
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,7 +22,7 @@ app = FastAPI(
 # --- CORS CONFIGURATION ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # This allows EVERYONE (including Vercel) to talk to the API
+    allow_origins=["*"],  # Allows Vercel and local dev to connect
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,13 +34,12 @@ def health() -> dict[str, str]:
 
 @app.post("/api/analyze-claim", response_model=AnalyzeClaimResponse)
 async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
-    # ... (Keep your existing logic here, it is correct)
     payload, uploads = await _parse_payload(request)
     
     state, refusal = analyze_with_agent(payload.text, payload.session_state)
     
+    # Manual Intercept for Date
     date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December|\d{1,2}[/-]\d{1,2}[/-])\s*\d{1,2}?(st|nd|rd|th)?\s*,?\s*202\d"
-    
     if re.search(date_pattern, payload.text, re.IGNORECASE):
         state.claim.incident_date = payload.text
         print(f"DEBUG: Manual Intercept - Incident Date set to: {payload.text}")
@@ -51,10 +51,15 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         state.claim, evidence_warnings = apply_evidence_to_claim(state.claim, evidence_items)
         state.evidence_items.extend(evidence_items)
 
+    # RAG Retrieval
     citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
     state.legal_citations = citations
     
     missing = missing_fields(state.claim)
+
+    # Helper function to prevent Pydantic 500 validation errors
+    def serialize_citations(cits):
+        return [c.model_dump() if hasattr(c, 'model_dump') else c for c in cits]
 
     if refusal:
         return AnalyzeClaimResponse(
@@ -64,7 +69,7 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
             claim=state.claim,
             session_state=state,
             refusal=refusal,
-            legal_citations=citations,
+            legal_citations=serialize_citations(citations),
             evidence_items=state.evidence_items,
             evidence_warnings=evidence_warnings,
         )
@@ -76,11 +81,12 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
             question=next_question(missing),
             claim=state.claim,
             session_state=state,
-            legal_citations=citations,
+            legal_citations=serialize_citations(citations),
             evidence_items=state.evidence_items,
             evidence_warnings=evidence_warnings,
         )
 
+    # Final review and PDF generation
     state.claim, red_team_notes = red_team_review(state.claim, citations, evidence_warnings)
     state.red_team_notes = red_team_notes
     pdf_base64 = generate_claim_pdf_base64(state.claim, citations, state.evidence_items, red_team_notes)
@@ -94,14 +100,11 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         pdf_base64=pdf_base64,
         pdf_url=pdf_data_url(pdf_base64),
         filename="fema-fast-track-claim.pdf",
-        legal_citations=citations,
+        legal_citations=serialize_citations(citations),
         evidence_items=state.evidence_items,
         evidence_warnings=evidence_warnings,
         red_team_notes=red_team_notes,
     )
-
-# ... (Keep _parse_payload and _rag_query as they are)
-
 
 async def _parse_payload(request: Request) -> tuple[AnalyzeClaimRequest, list[UploadFile]]:
     content_type = request.headers.get("content-type", "")
@@ -110,13 +113,17 @@ async def _parse_payload(request: Request) -> tuple[AnalyzeClaimRequest, list[Up
         text = str(form.get("text") or "")
         state_raw = form.get("session_state") or form.get("state")
         state = json.loads(str(state_raw)) if state_raw else None
-        uploads = [value for _, value in form.multi_items() if hasattr(value, "filename") and hasattr(value, "read")]
+        
+        uploads = []
+        for _, value in form.multi_items():
+            if hasattr(value, "filename") and hasattr(value, "read"):
+                uploads.append(value)
+                
         payload = AnalyzeClaimRequest.model_validate({"text": text, "session_state": state})
         return payload, uploads
 
     body = await request.json()
     return AnalyzeClaimRequest.model_validate(body), []
-
 
 def _rag_query(text: str, claim) -> str:
     return " ".join(
