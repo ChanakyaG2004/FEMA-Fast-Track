@@ -23,8 +23,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "fema-fast-track.vercel.app",  # 👈 IMPORTANT
+    "http://localhost:3000",
+    "https://fema-fast-track.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
