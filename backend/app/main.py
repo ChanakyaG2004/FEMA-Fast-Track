@@ -22,7 +22,10 @@ app = FastAPI(
 # --- CORS CONFIGURATION ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=[
+        "http://localhost:3000",
+        "fema-fast-track.vercel.app",  # 👈 IMPORTANT
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -109,6 +112,7 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
 
     state.claim, red_team_notes = red_team_review(state.claim, citations, evidence_warnings)
     pdf_base64 = generate_claim_pdf_base64(state.claim, citations, state.evidence_items, red_team_notes)
+    
     
     return AnalyzeClaimResponse(
         status=ClaimStatus.COMPLETE,
