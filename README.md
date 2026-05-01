@@ -1,27 +1,33 @@
-# FEMA Fast-Track 🚀
-**Accelerating Disaster Relief with AI-Powered Claim Preparation**
+# FEMA Fast-Track Backend
 
-FEMA Fast-Track is a privacy-first, local-LLM-driven assistant that helps disaster victims prepare structured, legally-compliant claim documents in minutes instead of days.
+Local FastAPI service for claim intake, schema validation, Stafford Act-aligned phrasing, RAG citations, evidence extraction, skeptical review, and PDF generation.
 
-## 🌟 The Problem
-After a disaster, victims are often overwhelmed. Traditional FEMA applications are complex, leading to missing information, "red-flag" keywords, and months of delays.
+## Run
 
-## ✨ Our Solution
-- **Strict Missing-Info Loop:** Our agent refuses to finalize a claim until every critical detail (date, ZIP, damage type) is captured.
-- **Evidence Extraction:** Uses OCR to pull dates and costs directly from contractor estimates and receipts.
-- **Red-Team Review:** An automated "Red-Team" agent checks for inconsistent data before submission.
-- **Legal Alignment:** Maps casual descriptions to official Stafford Act terminology for higher approval rates.
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m rag_engine.ingest_stafford_act --reset
+uvicorn app.main:app --reload --port 8000
+```
 
-## 🛠️ Tech Stack
-- **Frontend:** React + Vite (Tailwind CSS)
-- **Backend:** FastAPI (Python)
-- **AI/ML:** OpenAI GPT-4o-mini / LangChain
-- **OCR:** Pytesseract
-- **PDF Generation:** ReportLab / Base64 conversion
+The RAG index downloads FEMA's official Stafford Act PDF from:
 
-## 🚀 Local Setup
-1. **Backend:**
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   uvicorn app.main:app --reload
+```text
+https://www.fema.gov/sites/default/files/documents/fema_stafford_act_2021_vol1.pdf
+```
+
+It stores only legal reference chunks in `rag_engine/chroma_db`. Claim text and uploaded evidence are processed in memory and are not written to a persistent database.
+
+Image OCR uses `pytesseract`, which requires the system Tesseract binary to be installed. PDF text extraction works with the Python dependencies alone.
+
+By default the service uses deterministic local extraction and local hash embeddings. To enable OpenAI extraction/red-team review, set:
+
+```bash
+export ENABLE_OPENAI=1
+export OPENAI_API_KEY=...
+export OPENAI_MODEL=gpt-4o-mini
+```
+
+The system prompt instructs the model not to hallucinate legal codes and to refuse illegal or fraudulent requests.
