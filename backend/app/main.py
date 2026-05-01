@@ -50,14 +50,18 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         state.claim, evidence_warnings = apply_evidence_to_claim(state.claim, evidence_items)
         state.evidence_items.extend(evidence_items)
 
-    # --- THE FINAL PYDANTIC ALIGNMENT FIX ---
-    # We use 'source' and 'excerpt' keys to match your LegalCitation model exactly
+    # --- THE "OVER-ENGINEERED" PYDANTIC FIX ---
+    # This provides EVERY possible key your model might want
     raw_citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
     citations = []
     for c in raw_citations:
+        val_title = getattr(c, "title", getattr(c, "source", "Legal Reference"))
+        val_text = getattr(c, "text", getattr(c, "excerpt", str(c)))
         citations.append({
-            "source": getattr(c, "title", getattr(c, "source", "Legal Reference")),
-            "excerpt": getattr(c, "text", getattr(c, "excerpt", str(c)))
+            "title": val_title,
+            "source": val_title,
+            "text": val_text,
+            "excerpt": val_text
         })
     state.legal_citations = citations
     # ----------------------------------------
@@ -91,7 +95,7 @@ async def _parse_payload(request: Request) -> tuple[AnalyzeClaimRequest, list[Up
 def _rag_query(text: str, claim) -> str:
     return " ".join(filter(None, [text, claim.disaster_type, claim.damage_type]))
 
-# --- UNIVERSAL FOLDER SEARCH FOR FRONTEND ---
+# --- FRONTEND SERVING ---
 STATIC_PATH = None
 search_locations = [
     os.path.join(os.path.dirname(__file__), "dist"),
