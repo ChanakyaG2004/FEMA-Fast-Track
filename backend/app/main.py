@@ -50,14 +50,18 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         state.claim, evidence_warnings = apply_evidence_to_claim(state.claim, evidence_items)
         state.evidence_items.extend(evidence_items)
 
+    # --- THE FINAL PYDANTIC ALIGNMENT FIX ---
+    # We use 'source' and 'excerpt' keys to match your LegalCitation model exactly
     raw_citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
     citations = []
     for c in raw_citations:
         citations.append({
-            "title": getattr(c, "title", "Legal Reference"),
-            "text": getattr(c, "text", str(c))
+            "source": getattr(c, "title", getattr(c, "source", "Legal Reference")),
+            "excerpt": getattr(c, "text", getattr(c, "excerpt", str(c)))
         })
     state.legal_citations = citations
+    # ----------------------------------------
+
     missing = missing_fields(state.claim)
 
     if refusal:
@@ -87,9 +91,8 @@ async def _parse_payload(request: Request) -> tuple[AnalyzeClaimRequest, list[Up
 def _rag_query(text: str, claim) -> str:
     return " ".join(filter(None, [text, claim.disaster_type, claim.damage_type]))
 
-# --- THE UNIVERSAL FOLDER SEARCH ---
+# --- UNIVERSAL FOLDER SEARCH FOR FRONTEND ---
 STATIC_PATH = None
-# Check current directory, one up, and common Render paths
 search_locations = [
     os.path.join(os.path.dirname(__file__), "dist"),
     os.path.join(os.getcwd(), "backend", "app", "dist"),
@@ -100,7 +103,6 @@ search_locations = [
 for loc in search_locations:
     if os.path.exists(os.path.join(loc, "index.html")):
         STATIC_PATH = loc
-        print(f"DEBUG: Found frontend at {loc}")
         break
 
 if STATIC_PATH:
@@ -114,5 +116,3 @@ if STATIC_PATH:
         if os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(STATIC_PATH, "index.html"))
-else:
-    print("DEBUG: dist/index.html not found in any search location")
