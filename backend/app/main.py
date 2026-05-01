@@ -68,7 +68,16 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         state.claim, evidence_warnings = apply_evidence_to_claim(state.claim, evidence_items)
         state.evidence_items.extend(evidence_items)
 
-    citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
+    raw_citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
+    
+    # BRUTE FORCE: Convert whatever object RAG returns into a raw dictionary
+    citations = []
+    for c in raw_citations:
+        citations.append({
+            "title": getattr(c, "title", "Legal Reference"),
+            "text": getattr(c, "text", str(c))
+        })
+        
     state.legal_citations = citations
     
     missing = missing_fields(state.claim)
