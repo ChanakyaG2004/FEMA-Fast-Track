@@ -18,10 +18,11 @@ from rag_engine.retrieval import retrieve_relevant_clauses
 
 app = FastAPI(
     title="FEMA Fast-Track API",
-    description="Local, privacy-first FEMA claim preparation API.",
+    description="Unified FEMA claim preparation app.",
     version="0.1.0",
 )
 
+# CORS: Keep this for local testing, though Render won't need it once unified
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -40,6 +41,7 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
     
     state, refusal = analyze_with_agent(payload.text, payload.session_state)
     
+    # Manual Intercept for Date
     date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December|\d{1,2}[/-]\d{1,2}[/-])\s*\d{1,2}?(st|nd|rd|th)?\s*,?\s*202\d"
     if re.search(date_pattern, payload.text, re.IGNORECASE):
         state.claim.incident_date = payload.text
@@ -51,7 +53,7 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         state.claim, evidence_warnings = apply_evidence_to_claim(state.claim, evidence_items)
         state.evidence_items.extend(evidence_items)
 
-    # --- THE CAVEMAN PYDANTIC FIX ---
+    # --- PYDANTIC DICTIONARY FIX ---
     raw_citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
     citations = []
     for c in raw_citations:
@@ -60,7 +62,6 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
             "text": getattr(c, "text", str(c))
         })
     state.legal_citations = citations
-    # --------------------------------
 
     missing = missing_fields(state.claim)
 
@@ -124,17 +125,17 @@ def _rag_query(text: str, claim) -> str:
     return " ".join(filter(None, [text, claim.disaster_type, claim.damage_type]))
 
 # --- FRONTEND SERVING ---
-current_dir = os.path.dirname(os.path.abspath(__file__))
-dist_dir = os.path.join(current_dir, "dist")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+dist_path = os.path.join(BASE_DIR, "dist")
 
-if os.path.exists(dist_dir):
-    assets_dir = os.path.join(dist_dir, "assets")
-    if os.path.exists(assets_dir):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
-    
+if os.path.exists(dist_path):
+    assets_path = os.path.join(dist_path, "assets")
+    if os.path.exists(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+
     @app.get("/{catchall:path}")
-    def serve_frontend(catchall: str):
-        file_path = os.path.join(dist_dir, catchall)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(dist_dir, "index.html"))
+    async def serve_frontend(catchall: str):
+        full_path = os.path.join(dist_path, catchall)
+        if os.path.isfile(full_path):
+            return FileResponse(full_path)
+        return FileResponse(os.path.join(dist_path, "index.html"))
