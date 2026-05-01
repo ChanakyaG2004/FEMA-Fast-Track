@@ -15,14 +15,14 @@ from rag_engine.retrieval import retrieve_relevant_clauses
 
 app = FastAPI(
     title="FEMA Fast-Track API",
-    description="Local, privacy-first FEMA claim preparation API with a strict missing-information loop.",
+    description="Local, privacy-first FEMA claim preparation API.",
     version="0.1.0",
 )
 
 # --- CORS CONFIGURATION ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows Vercel and local dev to connect
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +31,11 @@ app.add_middleware(
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+# HELPER: Fixes the 500 ValidationError by converting objects to dicts
+def serialize_citations(cits):
+    if not cits: return []
+    return [c.model_dump() if hasattr(c, 'model_dump') else (c.dict() if hasattr(c, 'dict') else c) for c in cits]
 
 @app.post("/api/analyze-claim", response_model=AnalyzeClaimResponse)
 async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
@@ -42,7 +47,6 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
     date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December|\d{1,2}[/-]\d{1,2}[/-])\s*\d{1,2}?(st|nd|rd|th)?\s*,?\s*202\d"
     if re.search(date_pattern, payload.text, re.IGNORECASE):
         state.claim.incident_date = payload.text
-        print(f"DEBUG: Manual Intercept - Incident Date set to: {payload.text}")
 
     evidence_items = await extract_evidence(uploads)
     evidence_warnings: list[str] = []
@@ -51,15 +55,10 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         state.claim, evidence_warnings = apply_evidence_to_claim(state.claim, evidence_items)
         state.evidence_items.extend(evidence_items)
 
-    # RAG Retrieval
     citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
     state.legal_citations = citations
     
     missing = missing_fields(state.claim)
-
-    # Helper function to prevent Pydantic 500 validation errors
-    def serialize_citations(cits):
-        return [c.model_dump() if hasattr(c, 'model_dump') else c for c in cits]
 
     if refusal:
         return AnalyzeClaimResponse(
@@ -86,9 +85,7 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
             evidence_warnings=evidence_warnings,
         )
 
-    # Final review and PDF generation
     state.claim, red_team_notes = red_team_review(state.claim, citations, evidence_warnings)
-    state.red_team_notes = red_team_notes
     pdf_base64 = generate_claim_pdf_base64(state.claim, citations, state.evidence_items, red_team_notes)
     
     return AnalyzeClaimResponse(
@@ -113,29 +110,11 @@ async def _parse_payload(request: Request) -> tuple[AnalyzeClaimRequest, list[Up
         text = str(form.get("text") or "")
         state_raw = form.get("session_state") or form.get("state")
         state = json.loads(str(state_raw)) if state_raw else None
-        
-        uploads = []
-        for _, value in form.multi_items():
-            if hasattr(value, "filename") and hasattr(value, "read"):
-                uploads.append(value)
-                
+        uploads = [value for _, value in form.multi_items() if hasattr(value, "filename")]
         payload = AnalyzeClaimRequest.model_validate({"text": text, "session_state": state})
         return payload, uploads
-
     body = await request.json()
     return AnalyzeClaimRequest.model_validate(body), []
 
 def _rag_query(text: str, claim) -> str:
-    return " ".join(
-        filter(
-            None,
-            [
-                text,
-                claim.disaster_type,
-                claim.damage_type,
-                claim.damage_description,
-                claim.requested_relief,
-                claim.receipts_or_estimates,
-            ],
-        )
-    )
+    return " ".join(filter(None, [text, claim.disaster_type, claim.damage_type]))
