@@ -35,7 +35,20 @@ def health() -> dict[str, str]:
 # HELPER: Fixes the 500 ValidationError by converting objects to dicts
 def serialize_citations(cits):
     if not cits: return []
-    return [c.model_dump() if hasattr(c, 'model_dump') else (c.dict() if hasattr(c, 'dict') else c) for c in cits]
+    
+    clean_citations = []
+    for c in cits:
+        # Try every possible way to turn this object into a dictionary
+        if hasattr(c, 'model_dump'):
+            clean_citations.append(c.model_dump())
+        elif hasattr(c, 'dict'):
+            clean_citations.append(c.dict())
+        elif hasattr(c, '__dict__'):
+            clean_citations.append(vars(c))
+        else:
+            clean_citations.append(c) # Last resort
+            
+    return clean_citations
 
 @app.post("/api/analyze-claim", response_model=AnalyzeClaimResponse)
 async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
