@@ -16,7 +16,7 @@ import {
   Upload
 } from 'lucide-react';
 
-const API_ENDPOINT = '/api/analyze-claim';
+const API_ENDPOINT = 'https://fema-fast-track.onrender.com/api/analyze-claim';
 
 const starterMessage = {
   role: 'assistant',
