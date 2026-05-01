@@ -21,11 +21,7 @@ app = FastAPI(
 # --- CORS CONFIGURATION ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173", 
-        "http://127.0.0.1:5173",
-        "https://fema-fast-track.onrender.com/" 
-        ],
+    allow_origins=["*"],  # This allows EVERYONE (including Vercel) to talk to the API
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
