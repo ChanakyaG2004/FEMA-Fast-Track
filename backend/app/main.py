@@ -90,7 +90,7 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
             claim=state.claim,
             session_state=state,
             refusal=refusal,
-            legal_citations=serialize_citations(citations),
+            legal_citations=citations,
             evidence_items=state.evidence_items,
             evidence_warnings=evidence_warnings,
         )
@@ -102,7 +102,7 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
             question=next_question(missing),
             claim=state.claim,
             session_state=state,
-            legal_citations=serialize_citations(citations),
+            legal_citations=citations,
             evidence_items=state.evidence_items,
             evidence_warnings=evidence_warnings,
         )
@@ -119,7 +119,7 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         pdf_base64=pdf_base64,
         pdf_url=pdf_data_url(pdf_base64),
         filename="fema-fast-track-claim.pdf",
-        legal_citations=serialize_citations(citations),
+        legal_citations=citations,
         evidence_items=state.evidence_items,
         evidence_warnings=evidence_warnings,
         red_team_notes=red_team_notes,
