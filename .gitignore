@@ -3,7 +3,6 @@ __pycache__/
 *.py[cod]
 .venv/
 node_modules/
-dist/
 .env
 .env.local
 backend/rag_engine/data/
