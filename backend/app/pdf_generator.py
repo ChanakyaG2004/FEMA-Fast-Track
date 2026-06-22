@@ -33,7 +33,7 @@ def _pdf_text(value: str) -> str:
 def _multi_cell_section(pdf: FPDF, label: str, value: str) -> None:
     """Renders a full-width section with a bold label and wrapped text."""
     pdf.set_font("Helvetica", "B", 10)
-    pdf.multi_cell(190, 6, _pdf_text(label), ln=True)
+    pdf.multi_cell(190, 6, _pdf_text(label))
     pdf.set_font("Helvetica", "", 10)
     pdf.multi_cell(190, 5, _pdf_text(value))
     pdf.ln(2)
@@ -73,8 +73,8 @@ def generate_claim_pdf_base64(
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(50, 7, _pdf_text(f"{label}:"), border=0)
         pdf.set_font("Helvetica", "", 10)
-        # Using 140 width and ln=True ensures the next row starts below
-        pdf.multi_cell(140, 7, _pdf_text(str(value)), ln=True)
+        # multi_cell advances to the next line after rendering the value.
+        pdf.multi_cell(140, 7, _pdf_text(str(value)))
 
     pdf.ln(3)
     

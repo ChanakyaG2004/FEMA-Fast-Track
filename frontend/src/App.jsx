@@ -16,7 +16,8 @@ import {
   Upload
 } from 'lucide-react';
 
-const API_ENDPOINT = '/api/analyze-claim';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const API_ENDPOINT = `${API_BASE_URL}/api/analyze-claim`;
 
 const starterMessage = {
   role: 'assistant',
@@ -149,7 +150,7 @@ function App() {
         ...current,
         {
           role: 'assistant',
-          content: 'I could not reach the local claim service. Your notes are still here, so you can try again.'
+          content: 'I could not reach the claim service. Your notes are still here, so you can try again.'
         }
       ]);
     } finally {

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
-
-import chromadb
-from chromadb.config import Settings
 
 from app.models import LegalCitation
 
 from .embeddings import HashEmbeddingFunction
-from .ingest_stafford_act import COLLECTION_NAME, STAFFORD_ACT_URL, VECTOR_DIR
+COLLECTION_NAME = "stafford_act"
+STAFFORD_ACT_URL = "https://www.fema.gov/sites/default/files/documents/fema_stafford_act_2021_vol1.pdf"
+VECTOR_DIR = Path(__file__).resolve().parent / "chroma_db"
 
 
 FALLBACK_CHUNKS = [
@@ -42,6 +42,16 @@ FALLBACK_CHUNKS = [
 
 
 def _collection():
+    # Chroma's persistent store is useful in a long-running local service, but
+    # Vercel functions have an ephemeral, read-only deployment filesystem.
+    # Serverless requests use the built-in official-reference excerpts below.
+    if os.getenv("VERCEL"):
+        return None
+
+    import chromadb
+    from chromadb.config import Settings
+    from .embeddings import HashEmbeddingFunction
+
     Path(VECTOR_DIR).mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(VECTOR_DIR), settings=Settings(anonymized_telemetry=False))
     collection = client.get_or_create_collection(
@@ -66,10 +76,23 @@ def _collection():
 
 
 def retrieve_relevant_clauses(query: str, limit: int = 4) -> list[LegalCitation]:
-    collection = _collection()
-    results = collection.query(query_texts=[query], n_results=limit)
-    documents = results.get("documents", [[]])[0]
-    metadatas = results.get("metadatas", [[]])[0]
+    try:
+        collection = _collection()
+        if collection is None:
+            raise RuntimeError("Persistent vector storage is unavailable in serverless runtime")
+        results = collection.query(query_texts=[query], n_results=limit)
+        documents = results.get("documents", [[]])[0]
+        metadatas = results.get("metadatas", [[]])[0]
+    except Exception:
+        documents = [chunk["text"] for chunk in FALLBACK_CHUNKS[:limit]]
+        metadatas = [
+            {
+                "source": STAFFORD_ACT_URL,
+                "page": chunk["page"] or "",
+                "title": "Stafford Act reference",
+            }
+            for chunk in FALLBACK_CHUNKS[:limit]
+        ]
 
     citations: list[LegalCitation] = []
     for document, metadata in zip(documents, metadatas):

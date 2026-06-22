@@ -50,21 +50,10 @@ async def analyze_claim(request: Request) -> AnalyzeClaimResponse:
         state.claim, evidence_warnings = apply_evidence_to_claim(state.claim, evidence_items)
         state.evidence_items.extend(evidence_items)
 
-    # --- THE "OVER-ENGINEERED" PYDANTIC FIX ---
-    # This provides EVERY possible key your model might want
-    raw_citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
-    citations = []
-    for c in raw_citations:
-        val_title = getattr(c, "title", getattr(c, "source", "Legal Reference"))
-        val_text = getattr(c, "text", getattr(c, "excerpt", str(c)))
-        citations.append({
-            "title": val_title,
-            "source": val_title,
-            "text": val_text,
-            "excerpt": val_text
-        })
+    # Keep citations as validated models. Assigning dictionaries here bypasses
+    # Pydantic validation and caused malformed API responses in production.
+    citations = retrieve_relevant_clauses(_rag_query(payload.text, state.claim))
     state.legal_citations = citations
-    # ----------------------------------------
 
     missing = missing_fields(state.claim)
 
